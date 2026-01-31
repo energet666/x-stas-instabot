@@ -127,6 +127,7 @@ func main() {
 			var finalPath = filePath
 
 			if strings.HasSuffix(strings.ToLower(filePath), ".mp4") {
+				b.Edit(statusMsg, fmt.Sprintf("🛠 Оптимизирую видео %d из %d...", i+1, len(result.Files)))
 				log.Printf("[LOG] Optimizing video for compatibility: %s", filepath.Base(filePath))
 				optimizedPath, optErr := OptimizeVideo(filePath)
 				if optErr != nil {
@@ -149,9 +150,11 @@ func main() {
 					log.Printf("[WRN] Could not get metadata for %s: %v", finalPath, err)
 				}
 
+				b.Edit(statusMsg, fmt.Sprintf("📤 Отправляю файл %d из %d...", i+1, len(result.Files)))
 				log.Printf("[SEND] Sending video: %s", filepath.Base(finalPath))
 				err = c.Send(v)
 			} else {
+				b.Edit(statusMsg, fmt.Sprintf("📤 Отправляю файл %d из %d...", i+1, len(result.Files)))
 				p := &tele.Photo{File: tele.FromDisk(filePath)}
 				log.Printf("[SEND] Sending photo: %s", filepath.Base(filePath))
 				err = c.Send(p)
