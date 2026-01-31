@@ -1,0 +1,120 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/joho/godotenv"
+	tele "gopkg.in/telebot.v3"
+)
+
+func main() {
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, reading from environment")
+	}
+
+	token := os.Getenv("TELEGRAM_TOKEN")
+	if token == "" {
+		log.Fatal("TELEGRAM_TOKEN environment variable is required")
+	}
+
+	cookieFile := os.Getenv("COOKIES_FILE")
+
+	pref := tele.Settings{
+		Token:  token,
+		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
+		Client: &http.Client{
+			Timeout: 5 * time.Minute,
+		},
+	}
+
+	b, err := tele.NewBot(pref)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	b.Handle("/start", func(c tele.Context) error {
+		return c.Send("Привет! Отправь мне ссылку на Instagram пост, Reels или Carousel, и я скачаю контент для тебя.")
+	})
+
+	b.Handle(tele.OnText, func(c tele.Context) error {
+		text := c.Text()
+		user := c.Sender()
+
+		// Simple validation for Instagram URL
+		if !strings.Contains(text, "instagram.com/") {
+			return c.Send("⚠️ Пожалуйста, отправь корректную ссылку на Instagram.")
+		}
+
+		log.Printf("[REQ] User: %s (@%s) | URL: %s", user.FirstName, user.Username, text)
+
+		statusMsg, _ := b.Send(c.Chat(), "⏳ Начинаю скачивание... Это может занять до минуты.")
+
+		// Start download process
+		result, err := DownloadContent(text, cookieFile)
+		if err != nil {
+			log.Printf("[ERR] Download failed for %s: %v", text, err)
+			b.Edit(statusMsg, "❌ Ошибка при скачивании. Возможно, контент недоступен или ссылка неверна.")
+			return nil
+		}
+		defer result.Cleanup()
+
+		log.Printf("[LOG] Downloaded %d files for %s", len(result.Files), text)
+		b.Edit(statusMsg, fmt.Sprintf("✅ Скачано файлов: %d. Начинаю отправку...", len(result.Files)))
+
+		// Send files back
+		for i, filePath := range result.Files {
+			log.Printf("[PROC] Processing file %d/%d: %s", i+1, len(result.Files), filepath.Base(filePath))
+
+			var err error
+			var finalPath = filePath
+
+			if strings.HasSuffix(strings.ToLower(filePath), ".mp4") {
+				log.Printf("[LOG] Optimizing video for compatibility: %s", filepath.Base(filePath))
+				optimizedPath, optErr := OptimizeVideo(filePath)
+				if optErr != nil {
+					log.Printf("[WRN] Optimization failed: %v. Sending original.", optErr)
+				} else {
+					finalPath = optimizedPath
+				}
+
+				v := &tele.Video{
+					File:      tele.FromDisk(finalPath),
+					Streaming: true,
+				}
+
+				if meta, err := GetVideoMetadata(finalPath); err == nil {
+					v.Width = meta.Width
+					v.Height = meta.Height
+					v.Duration = meta.Duration
+				} else {
+					log.Printf("[WRN] Could not get metadata for %s: %v", finalPath, err)
+				}
+
+				log.Printf("[SEND] Sending video: %s", filepath.Base(finalPath))
+				err = c.Send(v)
+			} else {
+				p := &tele.Photo{File: tele.FromDisk(filePath)}
+				log.Printf("[SEND] Sending photo: %s", filepath.Base(filePath))
+				err = c.Send(p)
+			}
+
+			if err != nil {
+				log.Printf("[ERR] Failed to send file %s: %v", filePath, err)
+			}
+		}
+
+		log.Printf("[DONE] Finished processing request from @%s", user.Username)
+		b.Delete(statusMsg)
+		return nil
+	})
+
+	log.Printf("Bot started: @%s", b.Me.Username)
+	b.Start()
+}
