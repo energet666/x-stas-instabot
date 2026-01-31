@@ -103,7 +103,13 @@ func main() {
 		}
 		defer result.Cleanup()
 
-		log.Printf("[LOG] Downloaded %d files for %s", len(result.Files), text)
+		log.Printf("[LOG] Downloaded %d files for %s:", len(result.Files), text)
+		for _, f := range result.Files {
+			if info, err := os.Stat(f); err == nil {
+				sizeMB := float64(info.Size()) / (1024 * 1024)
+				log.Printf("  - %s (%.2f MB)", filepath.Base(f), sizeMB)
+			}
+		}
 
 		hasVideos := false
 		for _, f := range result.Files {
