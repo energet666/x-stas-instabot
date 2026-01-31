@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"io"
+
 	"github.com/joho/godotenv"
 	tele "gopkg.in/telebot.v3"
 )
@@ -22,6 +24,17 @@ func main() {
 	token := os.Getenv("TELEGRAM_TOKEN")
 	if token == "" {
 		log.Fatal("TELEGRAM_TOKEN environment variable is required")
+	}
+
+	adminID := os.Getenv("ADMIN_ID")
+
+	// Setup logging to file and stdout
+	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Failed to open log file: %v", err)
+	} else {
+		multi := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(multi)
 	}
 
 	cookieFile := os.Getenv("COOKIES_FILE")
@@ -41,6 +54,31 @@ func main() {
 
 	b.Handle("/start", func(c tele.Context) error {
 		return c.Send("Привет! Отправь мне ссылку на Instagram пост, Reels или Carousel, и я скачаю контент для тебя.")
+	})
+
+	b.Handle("/log", func(c tele.Context) error {
+		if adminID == "" || fmt.Sprintf("%d", c.Sender().ID) != adminID {
+			return nil // Silence for non-admins
+		}
+
+		// Read last lines of the log file
+		data, err := os.ReadFile("app.log")
+		if err != nil {
+			return c.Send("❌ Ошибка чтения логов.")
+		}
+
+		lines := strings.Split(string(data), "\n")
+		start := len(lines) - 21
+		if start < 0 {
+			start = 0
+		}
+
+		lastLogs := strings.Join(lines[start:], "\n")
+		if len(lastLogs) > 4000 {
+			lastLogs = lastLogs[len(lastLogs)-4000:]
+		}
+
+		return c.Send(fmt.Sprintf("📋 Последние логи:\n```\n%s\n```", lastLogs), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 	})
 
 	b.Handle(tele.OnText, func(c tele.Context) error {
