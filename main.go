@@ -98,13 +98,26 @@ func main() {
 		result, err := DownloadContent(text, cookieFile)
 		if err != nil {
 			log.Printf("[ERR] Download failed for %s: %v", text, err)
-			b.Edit(statusMsg, "❌ Ошибка при скачивании. Возможно, контент недоступен или ссылка неверна.")
+			b.Edit(statusMsg, fmt.Sprintf("❌ Ошибка при скачивании:\n`%v`", err), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 			return nil
 		}
 		defer result.Cleanup()
 
 		log.Printf("[LOG] Downloaded %d files for %s", len(result.Files), text)
-		b.Edit(statusMsg, fmt.Sprintf("✅ Скачано файлов: %d. Начинаю отправку...", len(result.Files)))
+
+		hasVideos := false
+		for _, f := range result.Files {
+			if strings.HasSuffix(strings.ToLower(f), ".mp4") {
+				hasVideos = true
+				break
+			}
+		}
+
+		if hasVideos {
+			b.Edit(statusMsg, "🛠 Оптимизирую видео для Telegram...")
+		} else {
+			b.Edit(statusMsg, fmt.Sprintf("✅ Скачано файлов: %d. Начинаю отправку...", len(result.Files)))
+		}
 
 		// Send files back
 		for i, filePath := range result.Files {
@@ -118,6 +131,7 @@ func main() {
 				optimizedPath, optErr := OptimizeVideo(filePath)
 				if optErr != nil {
 					log.Printf("[WRN] Optimization failed: %v. Sending original.", optErr)
+					c.Send(fmt.Sprintf("⚠️ Ошибка при оптимизации видео: %v. Отправляю оригинал...", optErr))
 				} else {
 					finalPath = optimizedPath
 				}
@@ -145,6 +159,7 @@ func main() {
 
 			if err != nil {
 				log.Printf("[ERR] Failed to send file %s: %v", filePath, err)
+				c.Send(fmt.Sprintf("⚠️ Не удалось отправить файл %s: %v", filepath.Base(filePath), err))
 			}
 		}
 
