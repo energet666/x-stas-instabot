@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,6 +92,23 @@ func main() {
 		}
 
 		log.Printf("[REQ] User: %s (@%s) | URL: %s", user.FirstName, user.Username, text)
+
+		// Send notification to admin
+		if adminID != "" {
+			adminIDInt, err := strconv.ParseInt(adminID, 10, 64)
+			if err == nil {
+				adminChat, err := b.ChatByID(adminIDInt)
+				if err == nil {
+					notificationMsg := fmt.Sprintf("🔔 *Новая ссылка от пользователя*\n\n"+
+						"👤 Имя: %s\n"+
+						"🆔 ID: %d\n"+
+						"📝 Username: @%s\n"+
+						"🔗 Ссылка: %s",
+						user.FirstName, user.ID, user.Username, text)
+					b.Send(adminChat, notificationMsg, &tele.SendOptions{ParseMode: tele.ModeMarkdown})
+				}
+			}
+		}
 
 		statusMsg, _ := b.Send(c.Chat(), "⏳ Начинаю скачивание... Это может занять до минуты.")
 
