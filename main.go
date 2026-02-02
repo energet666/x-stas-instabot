@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 )
 
 func main() {
+	// This is a test comment for the new branch
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, reading from environment")
@@ -28,6 +30,32 @@ func main() {
 	}
 
 	adminID := os.Getenv("ADMIN_ID")
+
+	// Load whitelist configuration
+	whitelist, err := LoadWhitelist()
+	if err != nil {
+		log.Fatalf("Failed to load whitelist: %v", err)
+	}
+	log.Printf("Whitelist loaded with %d users", len(whitelist.Users))
+
+	// Automatically add admin to whitelist
+	if adminID != "" {
+		adminIDInt, err := strconv.ParseInt(adminID, 10, 64)
+		if err != nil {
+			log.Printf("[WARN] Invalid ADMIN_ID format: %v", err)
+		} else {
+			// Check if admin is already in whitelist
+			if !slices.Contains(whitelist.Users, adminIDInt) {
+				if err := AddUserToWhitelist(whitelist, adminIDInt); err != nil {
+					log.Printf("[WARN] Failed to add admin to whitelist: %v", err)
+				} else {
+					log.Printf("[LOG] Admin (ID: %d) automatically added to whitelist", adminIDInt)
+				}
+			} else {
+				log.Printf("[LOG] Admin (ID: %d) already in whitelist", adminIDInt)
+			}
+		}
+	}
 
 	// Setup logging to file and stdout
 	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -54,6 +82,14 @@ func main() {
 	}
 
 	b.Handle("/start", func(c tele.Context) error {
+		if !IsUserWhitelisted(whitelist, c.Sender().ID) {
+			btn := &tele.ReplyMarkup{
+				InlineKeyboard: [][]tele.InlineButton{
+					{{Text: "🔐 Запросить доступ", Data: fmt.Sprintf("request_access:%d", c.Sender().ID)}},
+				},
+			}
+			return c.Send("⛔ У вас нет доступа к этому боту.", btn)
+		}
 		return c.Send("Привет! Отправь мне ссылку на Instagram пост, Reels или Carousel, и я скачаю контент для тебя.")
 	})
 
@@ -69,10 +105,7 @@ func main() {
 		}
 
 		lines := strings.Split(string(data), "\n")
-		start := len(lines) - 21
-		if start < 0 {
-			start = 0
-		}
+		start := max(len(lines)-21, 0)
 
 		lastLogs := strings.Join(lines[start:], "\n")
 		if len(lastLogs) > 4000 {
@@ -85,6 +118,16 @@ func main() {
 	b.Handle(tele.OnText, func(c tele.Context) error {
 		text := c.Text()
 		user := c.Sender()
+
+		// Check whitelist
+		if !IsUserWhitelisted(whitelist, user.ID) {
+			btn := &tele.ReplyMarkup{
+				InlineKeyboard: [][]tele.InlineButton{
+					{{Text: "🔐 Запросить доступ", Data: fmt.Sprintf("request_access:%d", user.ID)}},
+				},
+			}
+			return c.Send("⛔ У вас нет доступа к этому боту.", btn)
+		}
 
 		// Simple validation for Instagram URL
 		if !strings.Contains(text, "instagram.com/") {
@@ -193,6 +236,150 @@ func main() {
 		log.Printf("[DONE] Finished processing request from @%s", user.Username)
 		b.Delete(statusMsg)
 		return nil
+	})
+
+	// Handle callback for "Запросить доступ" button
+	b.Handle(tele.OnCallback, func(c tele.Context) error {
+		callback := c.Callback()
+		if callback == nil {
+			return nil
+		}
+
+		data := callback.Data
+
+		// Handle user's request access button
+		if strings.HasPrefix(data, "request_access:") {
+			parts := strings.Split(data, ":")
+			if len(parts) != 2 {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Неверный формат запроса"})
+			}
+
+			userID, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Неверный ID пользователя"})
+			}
+
+			// Only allow the user who clicked the button to request access
+			if c.Sender().ID != userID {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Вы можете запросить доступ только для себя"})
+			}
+
+			// Check if admin ID is configured
+			if adminID == "" {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Админ не настроен. Свяжитесь с владельцем бота."})
+			}
+
+			adminIDInt, err := strconv.ParseInt(adminID, 10, 64)
+			if err != nil {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Ошибка конфигурации админа"})
+			}
+
+			// Send request to admin
+			adminChat, err := b.ChatByID(adminIDInt)
+			if err != nil {
+				log.Printf("[ERR] Failed to get admin chat: %v", err)
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Ошибка отправки запроса"})
+			}
+
+			// Create inline keyboard for admin
+			adminBtn := &tele.ReplyMarkup{
+				InlineKeyboard: [][]tele.InlineButton{
+					{
+						{Text: "✅ Да", Data: fmt.Sprintf("approve_access:%d", userID)},
+						{Text: "❌ Нет", Data: fmt.Sprintf("deny_access:%d", userID)},
+					},
+				},
+			}
+
+			requestMsg := fmt.Sprintf("🔔 *Запрос на доступ*\n\n"+
+				"👤 Имя: %s\n"+
+				"🆔 ID: %d\n"+
+				"📝 Username: @%s\n\n"+
+				"Хочет получить доступ к боту.",
+				c.Sender().FirstName, userID, c.Sender().Username)
+
+			if _, err := b.Send(adminChat, requestMsg, &tele.SendOptions{ParseMode: tele.ModeMarkdown, ReplyMarkup: adminBtn}); err != nil {
+				log.Printf("[ERR] Failed to send access request to admin: %v", err)
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Ошибка отправки запроса"})
+			}
+
+			log.Printf("[REQ] Access request from user %d (%s @%s)", userID, c.Sender().FirstName, c.Sender().Username)
+			return c.Respond(&tele.CallbackResponse{Text: "✅ Запрос отправлен администратору"})
+		}
+
+		// Handle admin's approve button
+		if strings.HasPrefix(data, "approve_access:") {
+			// Verify admin
+			if adminID == "" || fmt.Sprintf("%d", c.Sender().ID) != adminID {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Только админ может одобрять запросы"})
+			}
+
+			parts := strings.Split(data, ":")
+			if len(parts) != 2 {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Неверный формат запроса"})
+			}
+
+			userID, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Неверный ID пользователя"})
+			}
+
+			// Add user to whitelist
+			if err := AddUserToWhitelist(whitelist, userID); err != nil {
+				log.Printf("[ERR] Failed to add user %d to whitelist: %v", userID, err)
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Ошибка добавления в белый список"})
+			}
+
+			log.Printf("[LOG] User %d added to whitelist by admin", userID)
+
+			// Notify user
+			userChat, err := b.ChatByID(userID)
+			if err == nil {
+				b.Send(userChat, "✅ Ваш запрос на доступ одобрен! Теперь вы можете использовать бота.")
+			}
+
+			// Update admin's message
+			if err := c.Edit("✅ Пользователь добавлен в белый список"); err != nil {
+				log.Printf("[ERR] Failed to edit admin message: %v", err)
+			}
+
+			return c.Respond(&tele.CallbackResponse{Text: "✅ Пользователь добавлен"})
+		}
+
+		// Handle admin's deny button
+		if strings.HasPrefix(data, "deny_access:") {
+			// Verify admin
+			if adminID == "" || fmt.Sprintf("%d", c.Sender().ID) != adminID {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Только админ может отклонять запросы"})
+			}
+
+			parts := strings.Split(data, ":")
+			if len(parts) != 2 {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Неверный формат запроса"})
+			}
+
+			userID, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil {
+				return c.Respond(&tele.CallbackResponse{Text: "❌ Неверный ID пользователя"})
+			}
+
+			log.Printf("[LOG] Access request from user %d denied by admin", userID)
+
+			// Notify user
+			userChat, err := b.ChatByID(userID)
+			if err == nil {
+				b.Send(userChat, "❌ Ваш запрос на доступ отклонен.")
+			}
+
+			// Update admin's message
+			if err := c.Edit("❌ Запрос отклонен"); err != nil {
+				log.Printf("[ERR] Failed to edit admin message: %v", err)
+			}
+
+			return c.Respond(&tele.CallbackResponse{Text: "❌ Запрос отклонен"})
+		}
+
+		return c.Respond()
 	})
 
 	log.Printf("Bot started: @%s", b.Me.Username)
