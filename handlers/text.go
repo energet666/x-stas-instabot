@@ -143,7 +143,7 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 						fileName := filepath.Base(filePath)
 						destPath := filepath.Join(config.PermanentStoragePath, fileName)
 
-						if err := os.Rename(filePath, destPath); err != nil {
+						if err := MoveFile(filePath, destPath); err != nil {
 							log.Printf("[ERR] Failed to move file %s to %s: %v", filePath, destPath, err)
 						} else {
 							log.Printf("[LOG] Moved %s to permanent storage", fileName)
