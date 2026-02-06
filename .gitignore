@@ -5,3 +5,4 @@
 app.log
 /vendor
 whitelist.json
+.DS_Store

@@ -7,20 +7,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/x-stas/instabot/handlers"
 )
 
 // DownloadResult holds information about downloaded files
-type DownloadResult struct {
-	Files []string
-	Dir   string
-}
+type DownloadResult = handlers.DownloadResult
 
 // VideoMetadata holds basic video information
-type VideoMetadata struct {
-	Width    int
-	Height   int
-	Duration int
-}
+type VideoMetadata = handlers.VideoMetadata
 
 // DownloadContent uses gallery-dl to download content from the given URL
 func DownloadContent(url string, cookieFile string) (*DownloadResult, error) {
@@ -81,13 +76,6 @@ func DownloadContent(url string, cookieFile string) (*DownloadResult, error) {
 		Files: files,
 		Dir:   tempDir,
 	}, nil
-}
-
-// Cleanup removes the temporary directory and its contents
-func (r *DownloadResult) Cleanup() {
-	if r.Dir != "" {
-		os.RemoveAll(r.Dir)
-	}
 }
 
 // GetVideoMetadata uses ffprobe to get video width, height, and duration
