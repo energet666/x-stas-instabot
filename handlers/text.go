@@ -131,6 +131,28 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 			}
 		}
 
+		// Move files to permanent storage if enabled and user is admin
+		if config.PermanentStoragePath != "" && config.AdminID != "" {
+			adminIDInt, err := strconv.ParseInt(config.AdminID, 10, 64)
+			if err == nil && user.ID == adminIDInt {
+				if err := os.MkdirAll(config.PermanentStoragePath, 0755); err != nil {
+					log.Printf("[ERR] Failed to create permanent storage dir: %v", err)
+				} else {
+					log.Printf("[LOG] Moving files to permanent storage: %s", config.PermanentStoragePath)
+					for _, filePath := range result.Files {
+						fileName := filepath.Base(filePath)
+						destPath := filepath.Join(config.PermanentStoragePath, fileName)
+
+						if err := os.Rename(filePath, destPath); err != nil {
+							log.Printf("[ERR] Failed to move file %s to %s: %v", filePath, destPath, err)
+						} else {
+							log.Printf("[LOG] Moved %s to permanent storage", fileName)
+						}
+					}
+				}
+			}
+		}
+
 		log.Printf("[DONE] Finished processing request from @%s", user.Username)
 		config.Bot.Delete(statusMsg)
 		return nil

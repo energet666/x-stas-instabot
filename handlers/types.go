@@ -21,13 +21,14 @@ type WhitelistChecker interface {
 
 // HandlerConfig contains configuration needed by handlers
 type HandlerConfig struct {
-	Whitelist        WhitelistChecker
-	AdminID          string
-	CookieFile       string
-	Bot              *tele.Bot
-	DownloadContent  DownloadContentFunc
-	OptimizeVideo    OptimizeVideoFunc
-	GetVideoMetadata GetVideoMetadataFunc
+	Whitelist            WhitelistChecker
+	AdminID              string
+	CookieFile           string
+	Bot                  *tele.Bot
+	DownloadContent      DownloadContentFunc
+	OptimizeVideo        OptimizeVideoFunc
+	GetVideoMetadata     GetVideoMetadataFunc
+	PermanentStoragePath string
 }
 
 // DownloadResult holds information about downloaded files

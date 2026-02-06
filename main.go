@@ -79,15 +79,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Load permanent storage path
+	permanentStoragePath := os.Getenv("PERMANENT_STORAGE_PATH")
+
 	// Create handler config
 	handlerConfig := &handlers.HandlerConfig{
-		Whitelist:        whitelist,
-		AdminID:          adminID,
-		CookieFile:       cookieFile,
-		Bot:              b,
-		DownloadContent:  DownloadContent,
-		OptimizeVideo:    OptimizeVideo,
-		GetVideoMetadata: GetVideoMetadata,
+		Whitelist:            whitelist,
+		AdminID:              adminID,
+		CookieFile:           cookieFile,
+		Bot:                  b,
+		DownloadContent:      DownloadContent,
+		OptimizeVideo:        OptimizeVideo,
+		GetVideoMetadata:     GetVideoMetadata,
+		PermanentStoragePath: permanentStoragePath,
 	}
 
 	// Register handlers
