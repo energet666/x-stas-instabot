@@ -10,8 +10,8 @@ import (
 
 	"io"
 
+	"github.com/energet666/x-stas-instabot/handlers"
 	"github.com/joho/godotenv"
-	"github.com/x-stas/instabot/handlers"
 	tele "gopkg.in/telebot.v3"
 )
 

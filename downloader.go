@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/x-stas/instabot/handlers"
+	"github.com/energet666/x-stas-instabot/handlers"
 )
 
 // DownloadResult holds information about downloaded files

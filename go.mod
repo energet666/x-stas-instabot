@@ -1,4 +1,4 @@
-module github.com/x-stas/instabot
+module github.com/energet666/x-stas-instabot
 
 go 1.25.2
 

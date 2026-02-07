@@ -22,7 +22,7 @@
 
 1.  Клонируйте репозиторий:
     ```bash
-    git clone https://github.com/x-stas/instabot.git
+    git clone https://github.com/energet666/x-stas-instabot.git
     cd x-stas-instabot
     ```
 
