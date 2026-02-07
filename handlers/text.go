@@ -85,6 +85,7 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 		}
 
 		// Send files back
+		finalPaths := make([]string, len(result.Files))
 		for i, filePath := range result.Files {
 			log.Printf("[PROC] Processing file %d/%d: %s", i+1, len(result.Files), filepath.Base(filePath))
 
@@ -126,6 +127,8 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 				err = c.Send(p)
 			}
 
+			finalPaths[i] = finalPath
+
 			if err != nil {
 				log.Printf("[ERR] Failed to send file %s: %v", filePath, err)
 				c.Send(fmt.Sprintf("⚠️ Не удалось отправить файл %s: %v", filepath.Base(filePath), err))
@@ -140,14 +143,15 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 					log.Printf("[ERR] Failed to create permanent storage dir: %v", err)
 				} else {
 					log.Printf("[LOG] Moving files to permanent storage: %s", config.PermanentStoragePath)
-					for _, filePath := range result.Files {
-						fileName := filepath.Base(filePath)
-						destPath := filepath.Join(config.PermanentStoragePath, fileName)
+					for i, path := range finalPaths {
+						// Use original filename but optimized content
+						originalName := filepath.Base(result.Files[i])
+						destPath := filepath.Join(config.PermanentStoragePath, originalName)
 
-						if err := MoveFile(filePath, destPath); err != nil {
-							log.Printf("[ERR] Failed to move file %s to %s: %v", filePath, destPath, err)
+						if err := MoveFile(path, destPath); err != nil {
+							log.Printf("[ERR] Failed to move file %s to %s: %v", path, destPath, err)
 						} else {
-							log.Printf("[LOG] Moved %s to permanent storage", fileName)
+							log.Printf("[LOG] Moved %s to permanent storage", originalName)
 						}
 					}
 				}
