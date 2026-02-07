@@ -104,6 +104,7 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 
 				v := &tele.Video{
 					File:      tele.FromDisk(finalPath),
+					FileName:  filepath.Base(finalPath),
 					Streaming: true,
 				}
 
