@@ -46,6 +46,8 @@ TELEGRAM_TOKEN=ваш_токен_бота
 ADMIN_ID=ваш_telegram_id
 COOKIES_FILE=cookies.txt
 PERMANENT_STORAGE_PATH=/path/to/storage
+CONCURRENT_LIMIT=5
+
 ```
 
 ### Описание переменных:
@@ -53,6 +55,7 @@ PERMANENT_STORAGE_PATH=/path/to/storage
 - `ADMIN_ID`: Ваш Telegram ID. Вы автоматически получите доступ к боту и будете получать уведомления о запросах на доступ.
 - `COOKIES_FILE` (Опционально): Путь к файлу с куки-файлами для `gallery-dl`. Помогает избежать блокировок со стороны Instagram.
 - `PERMANENT_STORAGE_PATH` (Опционально): Путь, куда будут сохраняться все скачанные файлы (только для запросов от администратора).
+- `CONCURRENT_LIMIT` (Опционально): Максимальное количество одновременных загрузок (По умолчанию: 5).
 
 ## � Получение куки (Cookies)
 

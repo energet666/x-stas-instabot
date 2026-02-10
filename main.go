@@ -82,6 +82,17 @@ func main() {
 	// Load permanent storage path
 	permanentStoragePath := os.Getenv("PERMANENT_STORAGE_PATH")
 
+	// Set concurrent limit
+	concurrentLimitStr := os.Getenv("CONCURRENT_LIMIT")
+	concurrentLimit := 1 // Default limit
+	if concurrentLimitStr != "" {
+		if limit, err := strconv.Atoi(concurrentLimitStr); err == nil && limit > 0 {
+			concurrentLimit = limit
+		}
+	}
+	semaphore := make(chan struct{}, concurrentLimit)
+	log.Printf("Concurrent request limit set to: %d", concurrentLimit)
+
 	// Create handler config
 	handlerConfig := &handlers.HandlerConfig{
 		Whitelist:            whitelist,
@@ -92,6 +103,7 @@ func main() {
 		OptimizeVideo:        OptimizeVideo,
 		GetVideoMetadata:     GetVideoMetadata,
 		PermanentStoragePath: permanentStoragePath,
+		Semaphore:            semaphore,
 	}
 
 	// Register handlers

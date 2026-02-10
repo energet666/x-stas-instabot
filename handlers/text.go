@@ -51,7 +51,23 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 			}
 		}
 
-		statusMsg, _ := config.Bot.Send(c.Chat(), "⏳ Начинаю скачивание... Это может занять до минуты.")
+		statusMsg, err := config.Bot.Send(c.Chat(), "⏳ Начинаю скачивание... Это может занять до минуты.")
+		if err != nil {
+			log.Printf("[ERR] Failed to send status message: %v", err)
+		}
+
+		// Limit concurrent downloads
+		select {
+		case config.Semaphore <- struct{}{}:
+			// Slot available, proceed immediately
+		default:
+			// Slots full, wait in queue
+			if statusMsg != nil {
+				config.Bot.Edit(statusMsg, "⏳ Сервер загружен. Вы в очереди...")
+			}
+			config.Semaphore <- struct{}{}
+		}
+		defer func() { <-config.Semaphore }()
 
 		// Start download process
 		result, err := config.DownloadContent(text, config.CookieFile)

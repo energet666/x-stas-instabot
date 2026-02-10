@@ -29,6 +29,7 @@ type HandlerConfig struct {
 	OptimizeVideo        OptimizeVideoFunc
 	GetVideoMetadata     GetVideoMetadataFunc
 	PermanentStoragePath string
+	Semaphore            chan struct{}
 }
 
 // DownloadResult holds information about downloaded files
