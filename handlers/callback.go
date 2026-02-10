@@ -132,8 +132,10 @@ func handleApproveAccess(c tele.Context, config *HandlerConfig) error {
 	}
 
 	// Update admin's message
-	if err := c.Edit("✅ Пользователь добавлен в белый список"); err != nil {
-		log.Printf("[ERR] Failed to edit admin message: %v", err)
+	if c.Message() != nil {
+		if err := c.Edit("✅ Пользователь добавлен в белый список"); err != nil {
+			log.Printf("[ERR] Failed to edit admin message: %v", err)
+		}
 	}
 
 	return c.Respond(&tele.CallbackResponse{Text: "✅ Пользователь добавлен"})
@@ -166,8 +168,10 @@ func handleDenyAccess(c tele.Context, config *HandlerConfig) error {
 	}
 
 	// Update admin's message
-	if err := c.Edit("❌ Запрос отклонен"); err != nil {
-		log.Printf("[ERR] Failed to edit admin message: %v", err)
+	if c.Message() != nil {
+		if err := c.Edit("❌ Запрос отклонен"); err != nil {
+			log.Printf("[ERR] Failed to edit admin message: %v", err)
+		}
 	}
 
 	return c.Respond(&tele.CallbackResponse{Text: "❌ Запрос отклонен"})

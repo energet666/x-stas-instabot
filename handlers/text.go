@@ -56,15 +56,23 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 			log.Printf("[ERR] Failed to send status message: %v", err)
 		}
 
+		// Helper to safely edit status message
+		safeEdit := func(text string, opts ...interface{}) {
+			if statusMsg != nil {
+				_, err := config.Bot.Edit(statusMsg, text, opts...)
+				if err != nil {
+					log.Printf("[WRN] Failed to edit status message: %v", err)
+				}
+			}
+		}
+
 		// Limit concurrent downloads
 		select {
 		case config.Semaphore <- struct{}{}:
 			// Slot available, proceed immediately
 		default:
 			// Slots full, wait in queue
-			if statusMsg != nil {
-				config.Bot.Edit(statusMsg, "⏳ Сервер загружен. Вы в очереди...")
-			}
+			safeEdit("⏳ Сервер загружен. Вы в очереди...")
 			config.Semaphore <- struct{}{}
 		}
 		defer func() { <-config.Semaphore }()
@@ -74,7 +82,7 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 		if err != nil {
 			log.Printf("[ERR] Download failed for %s: %v", text, err)
 			cleanErr := strings.ReplaceAll(err.Error(), "`", "'")
-			config.Bot.Edit(statusMsg, fmt.Sprintf("❌ Ошибка при скачивании:\n`%v`", cleanErr), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
+			safeEdit(fmt.Sprintf("❌ Ошибка при скачивании:\n`%v`", cleanErr), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 			return nil
 		}
 		defer result.Cleanup()
@@ -96,9 +104,9 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 		}
 
 		if hasVideos {
-			config.Bot.Edit(statusMsg, "🛠 Оптимизирую видео для Telegram...")
+			safeEdit("🛠 Оптимизирую видео для Telegram...")
 		} else {
-			config.Bot.Edit(statusMsg, fmt.Sprintf("✅ Скачано файлов: %d. Начинаю отправку...", len(result.Files)))
+			safeEdit(fmt.Sprintf("✅ Скачано файлов: %d. Начинаю отправку...", len(result.Files)))
 		}
 
 		// Send files back
@@ -110,7 +118,7 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 			var finalPath = filePath
 
 			if strings.HasSuffix(strings.ToLower(filePath), ".mp4") {
-				config.Bot.Edit(statusMsg, fmt.Sprintf("🛠 Оптимизирую видео %d из %d...", i+1, len(result.Files)))
+				safeEdit(fmt.Sprintf("🛠 Оптимизирую видео %d из %d...", i+1, len(result.Files)))
 				log.Printf("[LOG] Optimizing video for compatibility: %s", filepath.Base(filePath))
 				optimizedPath, optErr := config.OptimizeVideo(filePath)
 				if optErr != nil {
@@ -134,11 +142,11 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 					log.Printf("[WRN] Could not get metadata for %s: %v", finalPath, err)
 				}
 
-				config.Bot.Edit(statusMsg, fmt.Sprintf("📤 Отправляю файл %d из %d...", i+1, len(result.Files)))
+				safeEdit(fmt.Sprintf("📤 Отправляю файл %d из %d...", i+1, len(result.Files)))
 				log.Printf("[SEND] Sending video: %s", filepath.Base(finalPath))
 				err = c.Send(v)
 			} else {
-				config.Bot.Edit(statusMsg, fmt.Sprintf("📤 Отправляю файл %d из %d...", i+1, len(result.Files)))
+				safeEdit(fmt.Sprintf("📤 Отправляю файл %d из %d...", i+1, len(result.Files)))
 				p := &tele.Photo{File: tele.FromDisk(filePath)}
 				log.Printf("[SEND] Sending photo: %s", filepath.Base(filePath))
 				err = c.Send(p)
@@ -176,7 +184,9 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 		}
 
 		log.Printf("[DONE] Finished processing request from @%s", user.Username)
-		config.Bot.Delete(statusMsg)
+		if statusMsg != nil {
+			config.Bot.Delete(statusMsg)
+		}
 		return nil
 	}
 }
