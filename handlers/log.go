@@ -29,6 +29,7 @@ func HandleLog(config *HandlerConfig) func(tele.Context) error {
 			lastLogs = lastLogs[len(lastLogs)-4000:]
 		}
 
-		return c.Send(fmt.Sprintf("📋 Последние логи:\n```\n%s\n```", lastLogs), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
+		safeLogs := strings.ReplaceAll(lastLogs, "`", "'")
+		return c.Send(fmt.Sprintf("📋 Последние логи:\n```\n%s\n```", safeLogs), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 	}
 }

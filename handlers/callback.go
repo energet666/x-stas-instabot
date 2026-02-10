@@ -88,7 +88,7 @@ func handleRequestAccess(c tele.Context, config *HandlerConfig) error {
 		"🆔 ID: %d\n"+
 		"📝 Username: @%s\n\n"+
 		"Хочет получить доступ к боту.",
-		c.Sender().FirstName, userID, c.Sender().Username)
+		escapeMarkdown(c.Sender().FirstName), userID, escapeMarkdown(c.Sender().Username))
 
 	if _, err := config.Bot.Send(adminChat, requestMsg, &tele.SendOptions{ParseMode: tele.ModeMarkdown, ReplyMarkup: adminBtn}); err != nil {
 		log.Printf("[ERR] Failed to send access request to admin: %v", err)

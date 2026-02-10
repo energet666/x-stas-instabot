@@ -45,7 +45,7 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 						"🆔 ID: %d\n"+
 						"📝 Username: @%s\n"+
 						"🔗 Ссылка: %s",
-						user.FirstName, user.ID, user.Username, text)
+						escapeMarkdown(user.FirstName), user.ID, escapeMarkdown(user.Username), escapeMarkdown(text))
 					config.Bot.Send(adminChat, notificationMsg, &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 				}
 			}
@@ -57,7 +57,8 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 		result, err := config.DownloadContent(text, config.CookieFile)
 		if err != nil {
 			log.Printf("[ERR] Download failed for %s: %v", text, err)
-			config.Bot.Edit(statusMsg, fmt.Sprintf("❌ Ошибка при скачивании:\n`%v`", err), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
+			cleanErr := strings.ReplaceAll(err.Error(), "`", "'")
+			config.Bot.Edit(statusMsg, fmt.Sprintf("❌ Ошибка при скачивании:\n`%v`", cleanErr), &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 			return nil
 		}
 		defer result.Cleanup()
