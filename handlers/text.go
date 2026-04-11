@@ -120,7 +120,9 @@ func HandleText(config *HandlerConfig) func(tele.Context) error {
 			if strings.HasSuffix(strings.ToLower(filePath), ".mp4") {
 				safeEdit(fmt.Sprintf("🛠 Оптимизирую видео %d из %d...", i+1, len(result.Files)))
 				log.Printf("[LOG] Optimizing video for compatibility: %s", filepath.Base(filePath))
-				optimizedPath, optErr := config.OptimizeVideo(filePath)
+				optimizedPath, optErr := config.OptimizeVideo(filePath, func() {
+					safeEdit(fmt.Sprintf("📦 Видео %d из %d превышает 50 МБ — перекодирую с уменьшенным битрейтом...", i+1, len(result.Files)))
+				})
 				if optErr != nil {
 					log.Printf("[WRN] Optimization failed: %v. Sending original.", optErr)
 					c.Send(fmt.Sprintf("⚠️ Ошибка при оптимизации видео: %v. Отправляю оригинал...", optErr))

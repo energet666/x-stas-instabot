@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/energet666/x-stas-instabot/handlers"
@@ -117,18 +118,108 @@ func GetVideoMetadata(filePath string) (*VideoMetadata, error) {
 	}, nil
 }
 
-// OptimizeVideo for Telegram (H.264, AAC, FastStart)
-func OptimizeVideo(inputPath string) (string, error) {
+// telegramMaxBytes is the Telegram bot file size limit (50 MB)
+const telegramMaxBytes = 50 * 1024 * 1024
+
+// audioReserveBitrate is the bitrate (bits/s) reserved for the AAC audio track
+const audioReserveBitrate = 128_000
+
+// getVideoDuration uses ffprobe to return video duration in seconds
+func getVideoDuration(filePath string) (float64, error) {
+	cmd := exec.Command("ffprobe", "-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		filePath)
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe duration failed: %v", err)
+	}
+	val, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse duration: %v", err)
+	}
+	return val, nil
+}
+
+// OptimizeVideo for Telegram (H.264, AAC, FastStart).
+// If the output exceeds Telegram's 50 MB limit, it re-encodes with a
+// calculated target bitrate to guarantee the file fits within the limit.
+// onReencode is called (if non-nil) right before the second pass begins.
+func OptimizeVideo(inputPath string, onReencode func()) (string, error) {
 	outputPath := inputPath + ".optimized.mp4"
 
+	// First pass: quality-based encoding
 	cmd := exec.Command("ffmpeg", "-i", inputPath,
 		"-c:v", "libx264", "-preset", "superfast", "-crf", "28",
 		"-profile:v", "main", "-level", "3.0", "-pix_fmt", "yuv420p",
-		"-c:a", "aac", "-movflags", "+faststart",
+		"-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
 		"-y", outputPath)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("ffmpeg optimization failed: %v, output: %s", err, string(output))
+	}
+
+	// Check resulting file size
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		return "", fmt.Errorf("stat optimized file: %v", err)
+	}
+
+	if info.Size() <= telegramMaxBytes {
+		// File is within the limit — we're done
+		return outputPath, nil
+	}
+
+	log.Printf("[WRN] Optimized video is %.2f MB, exceeds 50 MB limit. Re-encoding with bitrate cap...",
+		float64(info.Size())/(1024*1024))
+
+	// Get duration to calculate the required bitrate
+	duration, err := getVideoDuration(outputPath)
+	if err != nil || duration <= 0 {
+		// Fallback: try to get duration from original file
+		duration, err = getVideoDuration(inputPath)
+		if err != nil || duration <= 0 {
+			return "", fmt.Errorf("cannot determine video duration for bitrate calculation: %v", err)
+		}
+	}
+
+	// targetTotalBits = 50 MB * 8 bits/byte
+	// videoBitrate = (targetTotalBits / duration) - audioReserveBitrate
+	// Apply a 2% safety margin to reliably stay under the limit
+	const safetyFactor = 0.98
+	targetTotalBits := float64(telegramMaxBytes) * 8
+	videoBitrateBps := int((targetTotalBits/duration)*safetyFactor) - audioReserveBitrate
+	if videoBitrateBps < 100_000 {
+		videoBitrateBps = 100_000 // floor: 100 kbps to keep watchable quality
+	}
+	videoBitrateStr := fmt.Sprintf("%dk", videoBitrateBps/1000)
+
+	log.Printf("[LOG] Re-encoding at video bitrate: %s (duration: %.1fs)", videoBitrateStr, duration)
+
+	// Notify caller that a second pass is starting
+	if onReencode != nil {
+		onReencode()
+	}
+
+	// Remove the oversized first-pass output
+	os.Remove(outputPath)
+
+	// Second pass: bitrate-capped encoding
+	cmd = exec.Command("ffmpeg", "-i", inputPath,
+		"-c:v", "libx264", "-preset", "superfast",
+		"-b:v", videoBitrateStr, "-maxrate", videoBitrateStr,
+		"-bufsize", fmt.Sprintf("%dk", videoBitrateBps/500), // 2× bitrate buffer
+		"-profile:v", "main", "-level", "3.0", "-pix_fmt", "yuv420p",
+		"-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
+		"-y", outputPath)
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("ffmpeg bitrate-cap re-encode failed: %v, output: %s", err, string(output))
+	}
+
+	// Final size check for logging
+	if fi, err := os.Stat(outputPath); err == nil {
+		log.Printf("[LOG] Re-encoded video size: %.2f MB", float64(fi.Size())/(1024*1024))
 	}
 
 	return outputPath, nil
